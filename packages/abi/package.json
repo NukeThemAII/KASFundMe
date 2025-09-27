@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./CampaignFactory.json": "./CampaignFactory.json",
-    "./Campaign.json": "./Campaign.json"
+    "./Campaign.json": "./Campaign.json",
+    "./addresses.json": "./addresses.json"
   }
 }

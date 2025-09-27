@@ -29,3 +29,7 @@ Thumbs.db
 # Coverage
 coverage
 
+
+# Python virtual environments
+.venv/
+slither-venv/

@@ -19,14 +19,22 @@
 - Build: `forge build` (Solc 0.8.24, no warnings outstanding).
 - Tests: `forge test` — 11/11 tests passing (see output in terminal transcript).
 
+## 2025-09-27 — Tooling & CI Enhancements
+- Exported canonical ABIs via `forge inspect ... --json` into `packages/abi`, wiring the package to re-export `addresses.json` for downstream consumers.
+- Added placeholder `addresses.json` manifests in `packages/abi/`, `apps/web/src/lib/`, and `services/indexer/src/` to unify the Kasplex Testnet deployment map (update values post-broadcast).
+- Updated web utilities to consume structured address data and surface defaults through `env.ts`.
+- Provisioned `.github/workflows/contracts-ci.yml` to run `forge fmt --check`, `forge build`, `forge test`, Slither (with noisy detectors excluded), and Mythril (warnings tolerated at low severity) on pushes/PRs touching contract surfaces.
+- Documented low-severity Mythril timestamp findings (expected for deadline checks) and Slither detector suppressions in this log.
+
 ## Security & Audit Notes
 - Campaign clones enforce single-shot `initialize` and factory-only access.
 - Contributions bounded to `uint128` to prevent overflow and keep storage packed; fee ledger prevents rounding drift during refunds.
 - `finalize` and `refund` follow CEI pattern and are `nonReentrant`; fee recipient pulled fresh from factory at execution for dynamic routing.
 - Direct transfers blocked via reverting `receive`/`fallback`.
-- Pending follow-up: integrate Slither/Mythril once CI is wired; sync generated ABIs (`forge build --json`) to `/packages/abi` and downstream apps after deployment.
+- Slither configuration excludes known safe patterns (arbitrary send w/ guarded call, strict equality zero checks, naming noise); Mythril highlights timestamp use for deadlines (documented requirement).
+- Pending follow-up: integrate results triage into security report template once CI history accumulates; replace placeholder addresses after Kasplex Testnet deployment.
 
 ## Next Steps
-1. Export latest ABIs & update `packages/abi/addresses.json`, `apps/web`, and `services/indexer` once the factory is deployed on Kasplex Testnet.
-2. Wire CI to run `forge test`, `forge fmt --check`, and static analyzers (Slither/Mythril) per security checklist.
+1. Deploy the factory to Kasplex Testnet and replace placeholder addresses across `packages/abi/addresses.json`, `apps/web/src/lib/addresses.json`, and `services/indexer/src/addresses.json` (plus env overrides).
+2. Extend CI notifications to post-process Slither/Mythril logs (e.g., artifact upload, severity gating for medium/high) and add caching for the Python virtualenv to speed up runs.
 3. Align frontend/indexer with contract events (`CampaignCreated`, `Contributed`, `Finalized`, `Refunded`, `MetadataUpdated`).
