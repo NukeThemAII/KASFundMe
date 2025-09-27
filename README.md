@@ -16,8 +16,8 @@ Crowdfunding on-chain for the Kasplex zkEVM ecosystem. KASFundME is a non-custod
   - `Campaign` contracts track contributions, enforce deadlines, and expose finalize/refund flows.
   - Security guardrails: CEI pattern, OpenZeppelin `Ownable2Step` + `ReentrancyGuard`, custom errors, storage packing, `receive()` reverts.
 - **Indexer & API** (`services/indexer`)
-  - Node 20 with viem client, Postgres 16 (via Prisma schema).
-  - Streams `CampaignCreated`, `Contributed`, `Finalized`, and `Refunded` events; exposes REST endpoints for campaigns and platform stats.
+  - Node 20 with viem client, Fastify, and Postgres 16 (SQL migrations tracked under `services/indexer/sql`).
+  - Streams `CampaignCreated`, `Contributed`, `Finalized`, `Refunded`, and `MetadataUpdated` events; exposes REST endpoints for campaigns and platform stats.
 - **Web application** (`apps/web`)
   - Next.js 14 (App Router) with wagmi 2, viem 2, RainbowKit 2, Tailwind CSS, shadcn/ui, TanStack Query.
   - Network guardrails for Kasplex Testnet (chainId `167012`), optimistic contribution UX, explorer links, optional USD price display (UI-only, free API).
@@ -30,7 +30,7 @@ Crowdfunding on-chain for the Kasplex zkEVM ecosystem. KASFundME is a non-custod
 /apps/web              # Next.js frontend & API routes
 /packages/contracts    # Foundry contracts, scripts, tests
 /packages/abi          # Generated ABIs + addresses.json (synced across apps)
-/services/indexer      # Indexer worker, Prisma schema, REST API
+/services/indexer      # Indexer worker, SQL migrations, REST API
 /infra                 # Docker, compose, reverse proxy, systemd configs
 /docs                  # Backlog, security notes, runbooks, API docs (in progress)
 AGENTS.md              # Source of truth for roles, requirements, and workflows
@@ -73,13 +73,19 @@ Configure the following (examples in `.env.example` or `docs`):
    forge build
    forge test -vvv
    ```
-3. **Start Postgres + indexer (optional)**
+3. **Start Postgres**
    ```bash
    cd infra
-   docker compose up db indexer
+   docker compose up db
    ```
-   Configure `services/indexer/.env` before starting; the worker backfills then streams events.
-4. **Run the web app**
+   Provide `services/indexer/.env` (see variables above) so the worker knows how to connect.
+4. **Apply indexer migrations & launch worker/API**
+   ```bash
+   pnpm migrate:indexer
+   pnpm start:indexer
+   ```
+   The combined process runs database migrations, backfills historical events, and exposes REST endpoints at `http://localhost:3001` by default.
+5. **Run the web app**
    ```bash
    cd apps/web
    pnpm dev
@@ -105,9 +111,9 @@ forge script script/Deploy.s.sol:Deploy \
 - Set `INDEXER_FROM_BLOCK` to the factory deployment block (or `0` for full replay).
 - Backfill ensures campaigns, contributions, finalization, and refund histories hydrate the database.
 - REST endpoints exposed:
-  - `GET /api/campaigns?limit=&cursor=`
-  - `GET /api/stats`
-  - `GET /api/campaign/:address`
+  - `GET /campaigns?limit=&offset=`
+  - `GET /campaign/:address`
+  - `GET /stats`
 
 ### Production Deployment (AlmaLinux VPS)
 1. Copy `.env` files (without secrets committed to git) and `.evm/kasplex_deployer.key` to the server.

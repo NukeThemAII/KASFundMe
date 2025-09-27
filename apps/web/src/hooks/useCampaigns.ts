@@ -2,11 +2,11 @@
 
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { CampaignDetail, PlatformStats } from "@/types/campaign";
+import type { CampaignSummary, PlatformStats } from "@/types/campaign";
 import { fetchJson } from "@/lib/fetcher";
 
 interface CampaignsResponse {
-  data: CampaignDetail[];
+  data: CampaignSummary[];
   meta: {
     total: number;
     limit: number;

@@ -97,12 +97,14 @@ We are building a **non-custodial crowdfunding dapp** on **Kasplex zkEVM**. On-c
      * `/packages/abi/addresses.json`
      * `/apps/web/src/lib/addresses.json`
      * `/services/indexer/src/addresses.json`
-   * Export ABIs from `out/` into `/packages/abi` and sync to web/indexer.
+ * Export ABIs from `out/` into `/packages/abi` and sync to web/indexer.
 
 2. **Indexer**
 
-   * Set `INDEXER_FROM_BLOCK` to the factory deployment block (or `0` for first run).
-   * Start worker; ensure it backfills `CampaignCreated`, then streams `Contributed/Finalized/Refunded`.
+   * Ensure Postgres is reachable; run `pnpm migrate:indexer` to apply SQL migrations.
+   * Configure `.env` (`DATABASE_URL`, `INDEXER_FROM_BLOCK`, `FACTORY_ADDRESS`, `CAMPAIGN_IMPLEMENTATION_ADDRESS`).
+   * Launch the combined worker & API via `pnpm start:indexer`; it backfills `CampaignCreated` then streams `Contributed`, `Finalized`, `Refunded`, and `MetadataUpdated` events.
+   * REST API defaults to `http://localhost:3001` and serves `/campaigns`, `/campaign/:address`, and `/stats`.
 
 3. **Web**
 
@@ -228,12 +230,16 @@ We are building a **non-custodial crowdfunding dapp** on **Kasplex zkEVM**. On-c
 
   * `Contributed` → `contributions(campaign, contributor, amount, fee, block_number, block_time)`
   * `Finalized` → `finals(campaign, payout, fee_total, block_number, block_time)`
+  * `Refunded` → `refunds(campaign, contributor, amount, block_number, block_time)`
+  * `MetadataUpdated` → latest `metadata_uri`
 
 **API (consumed by web)**
 
 * `GET /api/campaigns?limit&offset`
 * `GET /api/stats` (total campaigns, sum(raised), sum(fees))
 * `GET /api/campaign/:address` (optional detail)
+
+Responses include both raw `wei` values and human-readable KAS conversions to simplify frontend formatting.
 
 **Ops**
 
@@ -328,11 +334,11 @@ We are building a **non-custodial crowdfunding dapp** on **Kasplex zkEVM**. On-c
 
 ## 8) Open Tasks (initial)
 
-1. Deploy factory to testnet, capture address, and sync **addresses.json** across web/indexer/abi.
-2. Export ABIs from Foundry `out/` into `/packages/abi` and mirror to web/indexer.
-3. Stand up Postgres + indexer; verify `/api/stats` & `/api/campaigns`.
-4. Flesh out UI components and hooks; wire optimistic contribute; validate on device sizes.
-5. Add CI: lint, typecheck, `forge test`, Slither/Mythril (allowlist low/noise).
+1. Deploy factory to Kasplex Testnet and populate `packages/abi` / web / indexer address manifests (plus env overrides).
+2. Automate CI (`pnpm lint`, `pnpm --filter web build`, `forge fmt --check`, `forge test`, Slither/Mythril) with caching for Foundry & node modules.
+3. Author docs: `/docs/backlog.md`, `/docs/api.md` (document JSON schemas, decimals), `/docs/runbooks/indexer.md` (bootstrap, migrations, restart).
+4. Add persistence/health tooling for indexer (Prometheus-ready metrics, graceful shutdown hooks, retry/backoff tuning).
+5. Land QA automation (Playwright/Cypress) covering create → finalize → refund flows against testnet or fork.
 
 ---
 

@@ -10,7 +10,10 @@ import {
     GoalNotReached,
     RefundUnavailable,
     NothingToRefund,
-    Unauthorized
+    Unauthorized,
+    DirectDepositDisabled,
+    CampaignNotActive,
+    ZeroAddress
 } from "../src/CampaignErrors.sol";
 
 contract CampaignTest is Test {
@@ -23,6 +26,7 @@ contract CampaignTest is Test {
     address internal beneficiary = address(0xBEEF);
     address internal contributor = address(0xCAFE);
     address internal other = address(0xD1CE);
+    address internal secondContributor = address(0xF00D);
 
     uint128 internal constant GOAL = 10 ether;
     string internal constant URI = "ipfs://cid";
@@ -36,6 +40,7 @@ contract CampaignTest is Test {
         vm.label(beneficiary, "Beneficiary");
         vm.label(contributor, "Contributor");
         vm.label(other, "Other");
+        vm.label(secondContributor, "SecondContributor");
 
         uint64 deadline = uint64(block.timestamp + 7 days);
 
@@ -66,6 +71,20 @@ contract CampaignTest is Test {
         assertEq(campaign.contributionOf(contributor), 5 ether);
     }
 
+    function testFuzzContributionFeeAccuracy(uint128 amount) public {
+        vm.assume(amount > 0);
+        vm.assume(amount < type(uint128).max / 2);
+
+        vm.deal(contributor, amount);
+
+        vm.prank(contributor);
+        campaign.contribute{value: amount}();
+
+        uint256 expectedFee = (uint256(amount) * factory.feeBps()) / 10_000;
+        assertEq(campaign.feeAccrued(), expectedFee);
+        assertEq(campaign.raised(), amount);
+    }
+
     function testContributeAfterDeadlineReverts() public {
         vm.warp(block.timestamp + 8 days);
         vm.deal(contributor, 1 ether);
@@ -79,6 +98,15 @@ contract CampaignTest is Test {
         vm.prank(contributor);
         vm.expectRevert(ZeroContribution.selector);
         campaign.contribute{value: 0}();
+    }
+
+    function testReceiveReverts() public {
+        vm.deal(contributor, 1 ether);
+
+        vm.prank(contributor);
+        vm.expectRevert(DirectDepositDisabled.selector);
+        (bool ok,) = address(campaign).call{value: 1 ether}("");
+        ok;
     }
 
     function testFinalizeTransfersFunds() public {
@@ -102,6 +130,18 @@ contract CampaignTest is Test {
         assertEq(address(campaign).balance, 0);
     }
 
+    function testFinalizeClearsProtocolFee() public {
+        vm.deal(contributor, GOAL);
+
+        vm.prank(contributor);
+        campaign.contribute{value: GOAL}();
+
+        vm.prank(other);
+        campaign.finalize();
+
+        assertEq(campaign.feeAccrued(), 0);
+    }
+
     function testFinalizeRevertsIfGoalNotMet() public {
         vm.deal(contributor, GOAL - 1 ether);
 
@@ -110,6 +150,12 @@ contract CampaignTest is Test {
 
         vm.expectRevert(GoalNotReached.selector);
         campaign.finalize();
+    }
+
+    function testFactoryRejectsZeroBeneficiary() public {
+        uint64 deadline = uint64(block.timestamp + 3 days);
+        vm.expectRevert(ZeroAddress.selector);
+        factory.createCampaign(address(0), GOAL, deadline, URI);
     }
 
     function testRefundFlow() public {
@@ -133,6 +179,20 @@ contract CampaignTest is Test {
         assertEq(campaign.feeAccrued(), 0);
     }
 
+    function testRefundAfterFinalizeReverts() public {
+        vm.deal(contributor, GOAL);
+
+        vm.prank(contributor);
+        campaign.contribute{value: GOAL}();
+
+        vm.prank(other);
+        campaign.finalize();
+
+        vm.prank(contributor);
+        vm.expectRevert(RefundUnavailable.selector);
+        campaign.refund();
+    }
+
     function testRefundWithoutContributionReverts() public {
         vm.warp(block.timestamp + 8 days);
 
@@ -151,6 +211,31 @@ contract CampaignTest is Test {
         campaign.refund();
     }
 
+    function testMultipleRefundsMaintainBalances() public {
+        vm.deal(contributor, 6 ether);
+        vm.deal(secondContributor, 4 ether);
+
+        vm.prank(contributor);
+        campaign.contribute{value: 6 ether}();
+        vm.prank(secondContributor);
+        campaign.contribute{value: 4 ether}();
+
+        vm.warp(block.timestamp + 8 days);
+
+        vm.prank(contributor);
+        campaign.refund();
+
+        assertEq(campaign.contributionOf(contributor), 0);
+        assertEq(campaign.contributionOf(secondContributor), 4 ether);
+        assertEq(campaign.raised(), 4 ether);
+
+        vm.prank(secondContributor);
+        campaign.refund();
+
+        assertEq(campaign.raised(), 0);
+        assertEq(campaign.feeAccrued(), 0);
+    }
+
     function testMetadataUpdateOnlyCreator() public {
         vm.prank(creator);
         campaign.updateMetadata("ipfs://new");
@@ -159,6 +244,35 @@ contract CampaignTest is Test {
         vm.prank(other);
         vm.expectRevert(Unauthorized.selector);
         campaign.updateMetadata("ipfs://bad");
+    }
+
+    function testRefundReentrancyGuard() public {
+        ReentrancyRefundAttacker attacker = new ReentrancyRefundAttacker(campaign);
+
+        vm.deal(address(attacker), 2 ether);
+        vm.prank(address(attacker));
+        attacker.contribute{value: 2 ether}();
+
+        vm.warp(block.timestamp + 8 days);
+
+        vm.prank(address(attacker));
+        attacker.triggerRefund();
+
+        assertEq(campaign.contributionOf(address(attacker)), 0);
+        assertEq(campaign.raised(), 0);
+        assertEq(address(attacker).balance, 2 ether);
+    }
+
+    function testUpdateMetadataAfterFinalizationFails() public {
+        vm.deal(contributor, GOAL);
+        vm.prank(contributor);
+        campaign.contribute{value: GOAL}();
+
+        vm.prank(other);
+        campaign.finalize();
+
+        vm.expectRevert(CampaignNotActive.selector);
+        campaign.updateMetadata("ipfs://inactive");
     }
 
     function testFeeRecipientTwoStepUpdate() public {
@@ -172,5 +286,31 @@ contract CampaignTest is Test {
 
         assertEq(factory.feeRecipient(), newRecipient);
         assertEq(factory.pendingFeeRecipient(), address(0));
+    }
+}
+
+contract ReentrancyRefundAttacker {
+    Campaign internal immutable campaign;
+    bool internal entered;
+
+    constructor(Campaign campaign_) {
+        campaign = campaign_;
+    }
+
+    function contribute() external payable {
+        campaign.contribute{value: msg.value}();
+    }
+
+    function triggerRefund() external {
+        campaign.refund();
+    }
+
+    receive() external payable {
+        if (entered) {
+            return;
+        }
+        entered = true;
+        try campaign.refund() {} catch {}
+        entered = false;
     }
 }

@@ -5,6 +5,9 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
-    "lint:web": "pnpm --filter web lint"
+    "lint:web": "pnpm --filter web lint",
+    "migrate:indexer": "pnpm --filter @kasfundme/indexer migrate",
+    "dev:indexer": "pnpm --filter @kasfundme/indexer dev",
+    "start:indexer": "pnpm --filter @kasfundme/indexer start"
   }
 }

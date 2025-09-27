@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  fetchCampaignsFromIndexer,
-  getFallbackCampaigns,
-} from "@/lib/indexer-client";
+import { fetchCampaignsFromIndexer } from "@/lib/indexer-client";
 
 export const revalidate = 15;
 
@@ -14,19 +11,25 @@ export async function GET(request: Request) {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 10;
   const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0;
 
-  const indexerResponse = await fetchCampaignsFromIndexer(safeLimit, safeOffset);
-  if (indexerResponse) {
-    return NextResponse.json(indexerResponse, {
-      headers: {
-        "x-kasfundme-source": "indexer",
-      },
-    });
-  }
+  const { campaigns, stats, total, source } = await fetchCampaignsFromIndexer(
+    safeLimit,
+    safeOffset,
+  );
 
-  const fallback = getFallbackCampaigns(safeLimit, safeOffset);
-  return NextResponse.json(fallback, {
-    headers: {
-      "x-kasfundme-source": "mock",
+  return NextResponse.json(
+    {
+      data: campaigns,
+      meta: {
+        total,
+        limit: safeLimit,
+        offset: safeOffset,
+        stats,
+      },
     },
-  });
+    {
+      headers: {
+        "x-kasfundme-source": source,
+      },
+    },
+  );
 }

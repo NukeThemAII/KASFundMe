@@ -1,8 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  fetchCampaignFromIndexer,
-  getFallbackCampaign,
-} from "@/lib/indexer-client";
+import { fetchCampaignFromIndexer } from "@/lib/indexer-client";
 
 export const revalidate = 15;
 
@@ -10,17 +7,8 @@ export async function GET(
   _request: Request,
   { params }: { params: { address: string } },
 ) {
-  const indexerResponse = await fetchCampaignFromIndexer(params.address);
-  if (indexerResponse) {
-    return NextResponse.json(indexerResponse, {
-      headers: {
-        "x-kasfundme-source": "indexer",
-      },
-    });
-  }
-
-  const fallback = getFallbackCampaign(params.address);
-  if (!fallback) {
+  const campaign = await fetchCampaignFromIndexer(params.address);
+  if (!campaign) {
     return NextResponse.json(
       { error: "Campaign not found" },
       {
@@ -29,9 +17,12 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(fallback, {
-    headers: {
-      "x-kasfundme-source": "mock",
+  return NextResponse.json(
+    { data: campaign },
+    {
+      headers: {
+        "x-kasfundme-source": campaign.metadata.metadataUri ? "indexer" : "mock",
+      },
     },
-  });
+  );
 }

@@ -9,13 +9,13 @@ import type {
 
 interface CampaignTimelineProps {
   contributions: ContributionEvent[];
-  finalize?: FinalizeEvent;
+  finalization: FinalizeEvent | null;
   refunds: RefundEvent[];
 }
 
 export default function CampaignTimeline({
   contributions,
-  finalize,
+  finalization,
   refunds,
 }: CampaignTimelineProps) {
   const items = [
@@ -26,15 +26,14 @@ export default function CampaignTimeline({
       description: `${event.amountKas.toLocaleString()} KAS from ${shortAddress(event.contributor)}`,
       txHash: event.txHash,
     })),
-    ...(finalize
+    ...(finalization
       ? [
           {
             type: "FINALIZE" as const,
-            date: finalize.blockTime,
+            date: finalization.blockTime,
             title: "Finalized",
-            description: `Payout ${finalize.payoutKas.toLocaleString()} KAS`.
-              concat(` • Fees ${finalize.feeKas.toLocaleString()} KAS`),
-            txHash: finalize.txHash,
+            description: `Payout ${finalization.payoutKas.toLocaleString()} KAS • Fees ${finalization.feeKas.toLocaleString()} KAS`,
+            txHash: finalization.txHash,
           },
         ]
       : []),

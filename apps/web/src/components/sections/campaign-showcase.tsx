@@ -3,14 +3,7 @@
 import CampaignCard from "@/components/cards/campaign-card";
 import ContributePanel from "@/components/forms/contribute-panel";
 import { useCampaigns } from "@/hooks/useCampaigns";
-import type { CampaignDetail } from "@/types/campaign";
-
-function computeSupporters(campaign: CampaignDetail) {
-  const unique = new Set(
-    campaign.contributions.map((item) => item.contributor.toLowerCase()),
-  );
-  return unique.size || Math.max(3, Math.round(campaign.raisedKas / 750));
-}
+import type { CampaignSummary } from "@/types/campaign";
 
 export default function CampaignShowcase() {
   const { data, isLoading, isError } = useCampaigns({ limit: 3 });
@@ -24,7 +17,7 @@ export default function CampaignShowcase() {
         <div className="space-y-2">
           <h2 className="text-balance">Featured Kasplex campaigns</h2>
           <p className="text-sm text-slate-300/90">
-            Pulls from the indexer soon. For now, mocked entries illustrate how campaign metadata, progress, and explorer links surface.
+            Data streams from the indexer once synced. Mock entries display structure while the network catches up.
           </p>
         </div>
         {isError && (
@@ -41,11 +34,7 @@ export default function CampaignShowcase() {
                 />
               ))
             : campaigns.map((campaign) => (
-                <CampaignCard
-                  key={campaign.address}
-                  {...campaign}
-                  supportCount={computeSupporters(campaign)}
-                />
+                <CampaignCard key={campaign.address} campaign={campaign} />
               ))}
         </div>
       </div>
