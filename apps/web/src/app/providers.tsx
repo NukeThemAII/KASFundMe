@@ -2,6 +2,8 @@
 
 import "@rainbow-me/rainbowkit/styles.css";
 
+import "@/lib/polyfills";
+
 import { darkTheme, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReactNode, useEffect, useMemo, useState } from "react";

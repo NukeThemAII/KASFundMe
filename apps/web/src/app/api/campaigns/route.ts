@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
-import { mockCampaigns, platformStats } from "@/lib/mock-data";
+import {
+  fetchCampaignsFromIndexer,
+  getFallbackCampaigns,
+} from "@/lib/indexer-client";
 
 export const revalidate = 15;
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
   const url = new URL(request.url);
   const limit = Number(url.searchParams.get("limit") ?? "10");
   const offset = Number(url.searchParams.get("offset") ?? "0");
@@ -11,15 +14,19 @@ export function GET(request: Request) {
   const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 50) : 10;
   const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0;
 
-  const items = mockCampaigns.slice(safeOffset, safeOffset + safeLimit);
+  const indexerResponse = await fetchCampaignsFromIndexer(safeLimit, safeOffset);
+  if (indexerResponse) {
+    return NextResponse.json(indexerResponse, {
+      headers: {
+        "x-kasfundme-source": "indexer",
+      },
+    });
+  }
 
-  return NextResponse.json({
-    data: items,
-    meta: {
-      total: mockCampaigns.length,
-      limit: safeLimit,
-      offset: safeOffset,
-      stats: platformStats,
+  const fallback = getFallbackCampaigns(safeLimit, safeOffset);
+  return NextResponse.json(fallback, {
+    headers: {
+      "x-kasfundme-source": "mock",
     },
   });
 }

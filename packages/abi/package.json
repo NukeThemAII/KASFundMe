@@ -1,0 +1,10 @@
+{
+  "name": "@kasfundme/abi",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./CampaignFactory.json": "./CampaignFactory.json",
+    "./Campaign.json": "./Campaign.json"
+  }
+}

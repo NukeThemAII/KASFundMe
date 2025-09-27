@@ -53,9 +53,11 @@ Configure the following (examples in `.env.example` or `docs`):
   - `PRIVATE_KEY=0x...` **or** store the key at `.evm/kasplex_deployer.key` (never commit).
 - Web (`apps/web/.env.local`)
   - `NEXT_PUBLIC_RPC_URL=https://rpc.kasplextest.xyz`
-  - `NEXT_PUBLIC_CHAIN_ID=167012`
-  - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...`
-  - Optional: `NEXT_PUBLIC_USD_PRICE_ENDPOINT=...`
+  - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=<walletconnect-project-id>` (fallback placeholder works for local testing)
+  - `NEXT_PUBLIC_INDEXER_BASE_URL=<kasplex-indexer-api>`
+  - `NEXT_PUBLIC_CAMPAIGN_FACTORY_ADDRESS=<kasplex-factory-address>`
+  - `NEXT_PUBLIC_FEE_RECIPIENT_ADDRESS=<fee-recipient-address>`
+  - Optional: `NEXT_PUBLIC_ENABLE_USD_PRICE=false`
 - Indexer (`services/indexer/.env`)
   - `DATABASE_URL=postgresql://crowdfund:crowdfund@db:5432/crowdfund`
   - `INDEXER_FROM_BLOCK=<factory deployment block>`

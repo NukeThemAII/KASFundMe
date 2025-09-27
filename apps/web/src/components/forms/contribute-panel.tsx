@@ -1,43 +1,127 @@
 "use client";
 
 import type { ChangeEvent, FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { parseEther } from "viem";
 import { useUsdPrice } from "@/hooks/useUsdPrice";
+import { kasplexTestnet } from "@/lib/chains";
+import { getCampaignConfig } from "@/lib/contracts";
 
 interface ContributePanelProps {
   campaignAddress: string;
 }
 
+type ContributionFeedback =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "pending"; hash: `0x${string}` }
+  | { status: "confirmed"; hash: `0x${string}` };
+
 export default function ContributePanel({ campaignAddress }: ContributePanelProps) {
   const [amount, setAmount] = useState<string>("");
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<ContributionFeedback>({ status: "idle" });
   const { data: kasUsd } = useUsdPrice();
+  const { address: account, chainId, isConnected } = useAccount();
+  const { switchChainAsync, isPending: isSwitchingChain } = useSwitchChain();
+  const {
+    data: txHash,
+    error: writeError,
+    isPending,
+    reset: resetWrite,
+    writeContractAsync,
+  } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    chainId: kasplexTestnet.id,
+    hash: txHash,
+    query: {
+      enabled: Boolean(txHash),
+    },
+  });
+
+  const campaignConfig = useMemo(() => getCampaignConfig(campaignAddress), [campaignAddress]);
+
+  useEffect(() => {
+    if (writeError) {
+      setFeedback({ status: "error", message: writeError.message });
+    }
+  }, [writeError]);
+
+  useEffect(() => {
+    if (isSuccess && txHash) {
+      setFeedback({ status: "confirmed", hash: txHash });
+      setAmount("");
+      resetWrite();
+    }
+  }, [isSuccess, txHash, resetWrite]);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     setAmount(event.target.value);
-    setMessage(null);
+    setFeedback({ status: "idle" });
   }
+
+  const helperText = useMemo(() => {
+    if (!isConnected) {
+      return "Connect a wallet on Kasplex Testnet to contribute.";
+    }
+    if (chainId && chainId !== kasplexTestnet.id) {
+      return "Switch to Kasplex Testnet (chainId 167012).";
+    }
+    if (!campaignConfig) {
+      return "Campaign address is invalid.";
+    }
+    return null;
+  }, [campaignConfig, chainId, isConnected]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (!amount) {
-      setMessage("Enter an amount in KAS before contributing");
+      setFeedback({ status: "error", message: "Enter an amount in KAS before contributing." });
       return;
     }
-    setLoading(true);
+
+    if (!campaignConfig) {
+      setFeedback({ status: "error", message: "Campaign address is not valid." });
+      return;
+    }
+
+    if (!isConnected || !account) {
+      setFeedback({ status: "error", message: "Connect your wallet first." });
+      return;
+    }
+
+    if (chainId && chainId !== kasplexTestnet.id && switchChainAsync) {
+      try {
+        await switchChainAsync({ chainId: kasplexTestnet.id });
+      } catch (switchError) {
+        setFeedback({
+          status: "error",
+          message: (switchError as Error).message ?? "Failed to switch network.",
+        });
+        return;
+      }
+    }
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 450));
-      setMessage(
-        `Prepared pledge of ${amount} KAS to ${campaignAddress.slice(0, 10)}…. Sign the transaction when ready.`,
-      );
-      setAmount("");
-    } finally {
-      setLoading(false);
+      const hash = await writeContractAsync({
+        address: campaignConfig.address,
+        abi: campaignConfig.abi,
+        functionName: "contribute",
+        value: parseEther(amount),
+      });
+
+      setFeedback({ status: "pending", hash });
+    } catch (error) {
+      setFeedback({
+        status: "error",
+        message: (error as Error).message ?? "Failed to submit transaction.",
+      });
     }
   }
 
   const usdValue = kasUsd && amount ? Number(amount || "0") * kasUsd : null;
+  const isBusy = isPending || isConfirming || isSwitchingChain;
 
   return (
     <form
@@ -73,12 +157,37 @@ export default function ContributePanel({ campaignAddress }: ContributePanelProp
       </label>
       <button
         type="submit"
-        disabled={loading}
+        disabled={isBusy}
         className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-kaspa-blue-400 to-kaspa-400 px-5 py-3 text-sm font-semibold text-kaspa-night shadow-[0_15px_40px_rgba(20,152,255,0.35)] transition hover:shadow-[0_20px_50px_rgba(20,152,255,0.45)] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {loading ? "Opening wallet…" : "Contribute"}
+        {isConfirming
+          ? "Waiting for confirmations..."
+          : isPending
+            ? "Submitting contribution..."
+            : isSwitchingChain
+              ? "Switching network..."
+              : "Contribute"}
       </button>
-      {message && <p className="text-sm text-kaspa-200">{message}</p>}
+      {helperText && (
+        <p className="text-xs text-kaspa-200/80">{helperText}</p>
+      )}
+      {feedback.status === "error" && (
+        <p className="text-sm text-rose-300">{feedback.message}</p>
+      )}
+      {feedback.status === "pending" && (
+        <p className="text-sm text-kaspa-200">
+          Transaction submitted: {shortHash(feedback.hash)}. Monitor your wallet for confirmations.
+        </p>
+      )}
+      {feedback.status === "confirmed" && (
+        <p className="text-sm text-kaspa-200">
+          Contribution confirmed! Tx hash {shortHash(feedback.hash)}
+        </p>
+      )}
     </form>
   );
+}
+
+function shortHash(hash: `0x${string}`) {
+  return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
 }
