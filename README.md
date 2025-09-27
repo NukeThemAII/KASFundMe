@@ -1,19 +1,127 @@
-# KASFundMe
+# KASFundME
 
-Monorepo bootstrapping the Kasplex-native crowdfunding dapp.
+Crowdfunding on-chain for the Kasplex zkEVM ecosystem. KASFundME is a non-custodial GoFundMe-style dapp where campaigns are deployed as minimal proxy contracts, contributions settle in KAS, and an immutable 1% protocol fee funds platform operations.
 
-- `apps/web` — Next.js 14 UI with Kaspa-styled theme, wagmi 2.x, RainbowKit, Tailwind CSS, and mock API routes.
-- `packages/` — Reserved for Foundry contracts & shared ABIs.
-- `services/` — Reserved for indexer + API workers.
-- `pnpm-workspace.yaml` — Workspace definition for pnpm.
+## What You Can Do Today
+- **Create a campaign** with a funding goal, deadline, beneficiary wallet, and off-chain metadata URI.
+- **Contribute in KAS** directly to the campaign contract (no custody, funds remain on-chain until settlement).
+- **Finalize campaigns** that reach their goal before the deadline. Payouts send KAS to the beneficiary and route the 1% fee to the fee recipient.
+- **Refund contributors** automatically when deadlines expire without meeting the goal.
+- **Discover and analyze campaigns** through the indexer API that mirrors on-chain events.
 
-## Getting started
+## Architecture & Tech Stack
+- **On-chain contracts** (`packages/contracts`)
+  - Solidity `^0.8.24`, Foundry toolchain.
+  - `CampaignFactory` uses EIP-1167 minimal proxies; immutable `FEE_BPS = 100` (1%).
+  - `Campaign` contracts track contributions, enforce deadlines, and expose finalize/refund flows.
+  - Security guardrails: CEI pattern, OpenZeppelin `Ownable2Step` + `ReentrancyGuard`, custom errors, storage packing, `receive()` reverts.
+- **Indexer & API** (`services/indexer`)
+  - Node 20 with viem client, Postgres 16 (via Prisma schema).
+  - Streams `CampaignCreated`, `Contributed`, `Finalized`, and `Refunded` events; exposes REST endpoints for campaigns and platform stats.
+- **Web application** (`apps/web`)
+  - Next.js 14 (App Router) with wagmi 2, viem 2, RainbowKit 2, Tailwind CSS, shadcn/ui, TanStack Query.
+  - Network guardrails for Kasplex Testnet (chainId `167012`), optimistic contribution UX, explorer links, optional USD price display (UI-only, free API).
+- **Infrastructure** (`infra`)
+  - Docker Compose definitions for web, indexer, Postgres, and Caddy/Nginx proxy.
+  - AlmaLinux provisioning runbooks, backups (`pg_dump`), systemd timers, hardening (ufw, fail2ban, unattended upgrades).
 
-```bash
-pnpm install
-pnpm dev:web
+### Repository Layout
+```
+/apps/web              # Next.js frontend & API routes
+/packages/contracts    # Foundry contracts, scripts, tests
+/packages/abi          # Generated ABIs + addresses.json (synced across apps)
+/services/indexer      # Indexer worker, Prisma schema, REST API
+/infra                 # Docker, compose, reverse proxy, systemd configs
+/docs                  # Backlog, security notes, runbooks, API docs (in progress)
+AGENTS.md              # Source of truth for roles, requirements, and workflows
 ```
 
-Set `NEXT_PUBLIC_RPC_URL` and `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `apps/web/.env.local` before connecting wallets.
+## Requirements
+- Node.js 20.x and pnpm 8.x
+- Foundry toolchain (`forge`, `cast`, `anvil`)
+- Docker + Docker Compose (for local Postgres/indexer stack)
+- Optional: Slither, Mythril for security review pipelines
 
-See `AGENTS.md` (remote branch `origin/terragon/develop-kasfundme-dapp-0gm6m9`) for the broader delivery plan and guardrails.
+## Environment Variables
+Configure the following (examples in `.env.example` or `docs`):
+- Shared
+  - `RPC_URL=https://rpc.kasplextest.xyz`
+  - `CHAIN_ID=167012`
+  - `FEE_RECIPIENT=0xYourFeeRecipient`
+  - `FEE_BPS=100`
+- Contracts / Deploy
+  - `PRIVATE_KEY=0x...` **or** store the key at `.evm/kasplex_deployer.key` (never commit).
+- Web (`apps/web/.env.local`)
+  - `NEXT_PUBLIC_RPC_URL=https://rpc.kasplextest.xyz`
+  - `NEXT_PUBLIC_CHAIN_ID=167012`
+  - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...`
+  - Optional: `NEXT_PUBLIC_USD_PRICE_ENDPOINT=...`
+- Indexer (`services/indexer/.env`)
+  - `DATABASE_URL=postgresql://crowdfund:crowdfund@db:5432/crowdfund`
+  - `INDEXER_FROM_BLOCK=<factory deployment block>`
+
+## Local Development Workflow
+1. **Install dependencies**
+   ```bash
+   pnpm install
+   ```
+2. **Run contracts tests**
+   ```bash
+   cd packages/contracts
+   forge build
+   forge test -vvv
+   ```
+3. **Start Postgres + indexer (optional)**
+   ```bash
+   cd infra
+   docker compose up db indexer
+   ```
+   Configure `services/indexer/.env` before starting; the worker backfills then streams events.
+4. **Run the web app**
+   ```bash
+   cd apps/web
+   pnpm dev
+   ```
+   The app expects the Kasplex Testnet chain and will prompt users if they connect on the wrong network.
+
+### Deploying Contracts to Kasplex Testnet
+```bash
+export RPC_URL=https://rpc.kasplextest.xyz
+export PRIVATE_KEY=0x...
+export FEE_RECIPIENT=0xYourFeeRecipient
+export FEE_BPS=100
+
+forge script script/Deploy.s.sol:Deploy \
+  --rpc-url $RPC_URL \
+  --broadcast
+```
+- Record the emitted factory address.
+- Update `/packages/abi/addresses.json`, `/apps/web/src/lib/addresses.json`, and `/services/indexer/src/addresses.json` with the new address.
+- Export latest ABIs from `packages/contracts/out/` into `/packages/abi` and sync with web/indexer packages.
+
+### Indexer Notes
+- Set `INDEXER_FROM_BLOCK` to the factory deployment block (or `0` for full replay).
+- Backfill ensures campaigns, contributions, finalization, and refund histories hydrate the database.
+- REST endpoints exposed:
+  - `GET /api/campaigns?limit=&cursor=`
+  - `GET /api/stats`
+  - `GET /api/campaign/:address`
+
+### Production Deployment (AlmaLinux VPS)
+1. Copy `.env` files (without secrets committed to git) and `.evm/kasplex_deployer.key` to the server.
+2. Provision host hardening (ufw, fail2ban, automatic security updates).
+3. Use Docker Compose to launch services:
+   ```bash
+   docker compose up -d
+   ```
+4. Set up nightly `pg_dump` backups and systemd timers for indexer resilience.
+5. Monitor health endpoints and logs (stdout/stderr) for web and indexer containers.
+
+## Design Guardrails & Success Criteria
+- Non-custodial architecture: funds never touch centralized custody; campaign contracts hold all contributions.
+- Immutable fee: 1% admin fee baked into the factory; only `feeRecipient` can be changed via two-step ownership.
+- No paid external services; any USD price display is optional and UI-only.
+- Security posture: CEI ordering, `nonReentrant`, custom errors, revert-on-receive, storage packing, no unbounded loops in state-changing paths.
+- Reliability targets: indexer lag ≤ 5s, rebuild-from-genesis succeeds, tx success rate ≥ 98% on Kasplex Testnet, FCP < 2s on typical VPS.
+
+For detailed role-specific responsibilities and backlog, see [AGENTS.md](AGENTS.md).
