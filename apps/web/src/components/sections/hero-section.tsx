@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { RocketLaunchIcon, SparklesIcon } from "@heroicons/react/24/outline";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { usePlatformStats } from "@/hooks/usePlatformStats";
 
 export default function HeroSection() {
+  const { data } = usePlatformStats();
+  const stats = data?.data;
+
   return (
     <section className="relative mx-auto flex max-w-6xl flex-col items-center gap-12 pt-32 text-center md:items-start md:text-left">
       <div className="absolute inset-0 -z-10 flex items-center justify-center opacity-60">
@@ -36,12 +40,16 @@ export default function HeroSection() {
             Explore live campaigns
           </Link>
         </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200/80 md:max-w-md">
+        <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-200/80 md:max-w-md">
           <div className="flex flex-col">
             <span className="text-xs uppercase tracking-[0.2em] text-kaspa-300">
               Ready to contribute
             </span>
             <span className="font-medium text-slate-100">Connect your Kaspa wallet to pledge in seconds.</span>
+          </div>
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <span>{stats?.activeCampaigns ?? 0} campaigns live</span>
+            <span>{stats ? `${stats.totalRaisedKas.toLocaleString()} KAS raised` : "—"}</span>
           </div>
           <ConnectButton showBalance={false} label="Connect" accountStatus="avatar" />
         </div>

@@ -5,10 +5,10 @@ import { useMemo } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 const links = [
-  { href: "#campaigns", label: "Campaigns" },
-  { href: "#create", label: "Create" },
-  { href: "#protocol", label: "Protocol" },
-  { href: "#roadmap", label: "Roadmap" },
+  { href: "/#campaigns", label: "Campaigns" },
+  { href: "/create", label: "Create" },
+  { href: "/#protocol", label: "Protocol" },
+  { href: "/admin", label: "Admin" },
 ];
 
 export default function TopNav() {
@@ -24,13 +24,13 @@ export default function TopNav() {
       </Link>
       <nav className="hidden items-center gap-6 text-sm font-medium text-slate-200 md:flex">
         {anchorLinks.map((link) => (
-          <a
+          <Link
             key={link.href}
             href={link.href}
             className="transition-colors duration-150 ease-out hover:text-white"
           >
             {link.label}
-          </a>
+          </Link>
         ))}
       </nav>
       <div className="flex items-center gap-3">

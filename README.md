@@ -2,7 +2,7 @@
 
 Monorepo bootstrapping the Kasplex-native crowdfunding dapp.
 
-- `apps/web` — Next.js 14 UI with Kaspa-styled theme, wagmi 2.x, RainbowKit, and Tailwind CSS.
+- `apps/web` — Next.js 14 UI with Kaspa-styled theme, wagmi 2.x, RainbowKit, Tailwind CSS, and mock API routes.
 - `packages/` — Reserved for Foundry contracts & shared ABIs.
 - `services/` — Reserved for indexer + API workers.
 - `pnpm-workspace.yaml` — Workspace definition for pnpm.

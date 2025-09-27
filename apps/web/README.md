@@ -18,21 +18,28 @@ Create `apps/web/.env.local` and set:
 ```
 NEXT_PUBLIC_RPC_URL=https://rpc.kasplextest.xyz
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=<walletconnect-project-id>
+# Optional: disable price fetching when offline or rate limited
+NEXT_PUBLIC_ENABLE_USD_PRICE=true
 ```
 
 The UI falls back to a placeholder project id for local exploration, but production builds must supply a real WalletConnect ID.
 
+Set `NEXT_PUBLIC_ENABLE_USD_PRICE=false` to skip Coingecko requests in development.
+
 ## Project structure
 
-- `src/app` — Next.js App Router pages and providers
+- `src/app` — App Router pages, including `/`, `/create`, `/campaign/[address]`, `/admin`, and mock `/api/*` routes
 - `src/components` — Reusable layout, section, card, and form components
-- `src/lib` — Chain + Wagmi config utilities
+- `src/hooks` — React Query hooks (`useCampaigns`, `useCampaign`, `useContributions`, `usePlatformStats`, `useUsdPrice`)
+- `src/lib` — Chain config, data fetcher, mock data store
+- `src/types` — Shared TypeScript models
 - `tailwind.config.ts` — Kaspa-inspired palette, shadows, gradients
 
 ## Next steps
 
 1. Wire ABIs + factory addresses once contracts deploy (see `/packages/abi`).
-2. Replace mocked campaign data with API responses from the indexer service.
-3. Surface optimistic transaction states via wagmi actions.
+2. Replace mocked campaign data with live indexer responses under `/app/api/*`.
+3. Tune SSR for RainbowKit connectors to silence optional dependency warnings.
+4. Surface optimistic transaction states via wagmi actions.
 
 Refer to `AGENTS.md` for the complete cross-team backlog.

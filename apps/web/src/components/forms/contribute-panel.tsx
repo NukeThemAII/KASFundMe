@@ -2,6 +2,7 @@
 
 import type { ChangeEvent, FormEvent } from "react";
 import { useState } from "react";
+import { useUsdPrice } from "@/hooks/useUsdPrice";
 
 interface ContributePanelProps {
   campaignAddress: string;
@@ -11,6 +12,7 @@ export default function ContributePanel({ campaignAddress }: ContributePanelProp
   const [amount, setAmount] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const { data: kasUsd } = useUsdPrice();
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     setAmount(event.target.value);
@@ -35,6 +37,8 @@ export default function ContributePanel({ campaignAddress }: ContributePanelProp
     }
   }
 
+  const usdValue = kasUsd && amount ? Number(amount || "0") * kasUsd : null;
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -57,6 +61,15 @@ export default function ContributePanel({ campaignAddress }: ContributePanelProp
           placeholder="250"
           className="w-full rounded-xl border border-white/10 bg-kaspa-night/60 px-4 py-3 text-sm text-white shadow-inner outline-none transition focus:border-kaspa-blue-300 focus:ring-2 focus:ring-kaspa-blue-400/40"
         />
+        {usdValue ? (
+          <span className="text-xs text-slate-400">
+            ≈ ${usdValue.toLocaleString(undefined, { maximumFractionDigits: 2 })} USD
+          </span>
+        ) : (
+          <span className="text-xs text-slate-500">
+            USD preview appears once the public price endpoint responds.
+          </span>
+        )}
       </label>
       <button
         type="submit"
