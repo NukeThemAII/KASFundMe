@@ -1,0 +1,63 @@
+name: Contracts CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "packages/contracts/**"
+      - "packages/abi/**"
+      - "apps/web/src/lib/**"
+      - ".github/workflows/contracts-ci.yml"
+  pull_request:
+    paths:
+      - "packages/contracts/**"
+      - "packages/abi/**"
+      - "apps/web/src/lib/**"
+      - ".github/workflows/contracts-ci.yml"
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Forge fmt check
+        run: forge fmt --check
+        working-directory: packages/contracts
+
+      - name: Forge build
+        run: forge build
+        working-directory: packages/contracts
+
+      - name: Forge test
+        run: forge test
+        working-directory: packages/contracts
+
+      - name: Setup Slither virtualenv
+        run: |
+          python -m venv slither-venv
+          source slither-venv/bin/activate
+          pip install --upgrade pip
+          pip install slither-analyzer==0.11.3
+        working-directory: packages/contracts
+
+      - name: Run Slither
+        run: |
+          source slither-venv/bin/activate
+          slither src --solc-remaps lib/=lib/ --solc-args "--allow-paths lib" --exclude-informational --exclude-low --exclude naming-conventions,shadowing-state,unused-state,external-function,too-many-digits,deterministic-bytecode,unused-state-vars,assembly,solc-version,arbitrary-send-eth,incorrect-equality
+        working-directory: packages/contracts
+
+      - name: Mythril analysis (allow low severity warnings)
+        run: |
+          set -o pipefail
+          docker run --rm -v ${{ github.workspace }}:/project -w /project/packages/contracts mythril/myth analyze src/Campaign.sol --solv 0.8.24 --execution-timeout 60 --solver-timeout 60000 --outform text --solc-args "--allow-paths /project/packages/contracts/src,/project/packages/contracts/lib --base-path /project/packages/contracts" || status=$?
+          if [ "${status:-0}" -gt 1 ]; then
+            exit "${status}"
+          fi

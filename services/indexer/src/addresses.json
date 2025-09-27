@@ -1,0 +1,8 @@
+{
+  "kasplexTestnet": {
+    "chainId": 167012,
+    "campaignFactory": "",
+    "campaignImplementation": "",
+    "feeRecipient": ""
+  }
+}
