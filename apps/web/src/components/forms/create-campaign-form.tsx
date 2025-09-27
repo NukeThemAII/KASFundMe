@@ -1,8 +1,12 @@
 "use client";
 
 import type { ChangeEvent, FormEvent } from "react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useAccount, useSwitchChain, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { parseEther } from "viem";
 import { z } from "zod";
+import { kasplexTestnet } from "@/lib/chains";
+import { campaignFactoryAbi, campaignFactoryAddress } from "@/lib/contracts";
 
 const schema = z.object({
   name: z
@@ -10,8 +14,9 @@ const schema = z.object({
     .min(3, "Give your campaign a descriptive name")
     .max(80, "Keep it under 80 characters"),
   goal: z
-    .number({ invalid_type_error: "Enter a KAS amount" })
-    .positive("Goal must be greater than zero"),
+    .string()
+    .min(1, "Enter a KAS amount")
+    .refine((value) => Number(value) > 0, "Goal must be greater than zero"),
   beneficiary: z
     .string()
     .regex(/^0x[a-fA-F0-9]{40}$/u, "Enter a valid Kasplex address"),
@@ -28,9 +33,15 @@ type FormState = z.infer<typeof schema>;
 
 type FormErrors = Partial<Record<keyof FormState, string>>;
 
+type SubmissionFeedback =
+  | { status: "idle" }
+  | { status: "error"; message: string }
+  | { status: "pending"; hash: `0x${string}` }
+  | { status: "confirmed"; hash: `0x${string}` };
+
 const initialState: FormState = {
   name: "",
-  goal: 0,
+  goal: "",
   beneficiary: "",
   deadline: "",
   metadataUri: "",
@@ -39,21 +50,64 @@ const initialState: FormState = {
 export default function CreateCampaignForm() {
   const [form, setForm] = useState<FormState>(initialState);
   const [errors, setErrors] = useState<FormErrors>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<SubmissionFeedback>({ status: "idle" });
+
+  const { address: account, chainId, isConnected } = useAccount();
+  const { switchChainAsync, isPending: isSwitchingChain } = useSwitchChain();
+  const {
+    data: txHash,
+    error: writeError,
+    isPending,
+    reset: resetWrite,
+    writeContractAsync,
+  } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    chainId: kasplexTestnet.id,
+    hash: txHash,
+    query: {
+      enabled: Boolean(txHash),
+    },
+  });
+
+  useEffect(() => {
+    if (writeError) {
+      setFeedback({ status: "error", message: writeError.message });
+    }
+  }, [writeError]);
+
+  useEffect(() => {
+    if (isSuccess && txHash) {
+      setFeedback({ status: "confirmed", hash: txHash });
+      setForm(initialState);
+      resetWrite();
+    }
+  }, [isSuccess, txHash, resetWrite]);
 
   function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const { name, value } = event.target;
     setForm((prev) => ({
       ...prev,
-      [name]: name === "goal" ? Number(value) : value,
+      [name]: value,
     }));
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }
 
+  const helperText = useMemo(() => {
+    if (!isConnected) {
+      return "Connect a wallet on Kasplex Testnet before deploying.";
+    }
+    if (chainId && chainId !== kasplexTestnet.id) {
+      return "Switch to Kasplex Testnet (chainId 167012).";
+    }
+    if (!campaignFactoryAddress) {
+      return "Set NEXT_PUBLIC_CAMPAIGN_FACTORY_ADDRESS or update src/lib/addresses.ts.";
+    }
+    return null;
+  }, [chainId, isConnected]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFeedback(null);
+    setFeedback({ status: "idle" });
 
     const parseResult = schema.safeParse(form);
     if (!parseResult.success) {
@@ -66,17 +120,59 @@ export default function CreateCampaignForm() {
       return;
     }
 
-    setSubmitting(true);
+    if (!isConnected || !account) {
+      setFeedback({ status: "error", message: "Connect your wallet first." });
+      return;
+    }
+
+    if (!campaignFactoryAddress) {
+      setFeedback({
+        status: "error",
+        message:
+          "Campaign factory address is not configured. Update NEXT_PUBLIC_CAMPAIGN_FACTORY_ADDRESS.",
+      });
+      return;
+    }
+
+    if (chainId && chainId !== kasplexTestnet.id && switchChainAsync) {
+      try {
+        await switchChainAsync({ chainId: kasplexTestnet.id });
+      } catch (switchError) {
+        setFeedback({
+          status: "error",
+          message: (switchError as Error).message ?? "Failed to switch network.",
+        });
+        return;
+      }
+    }
+
+    const { name, goal, beneficiary, deadline, metadataUri } = parseResult.data;
+    const goalValue = parseEther(goal);
+    const deadlineSeconds = BigInt(Math.floor(new Date(deadline).getTime() / 1000));
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      setFeedback(
-        "Campaign draft prepared. Next step: review transaction details and broadcast via your connected wallet.",
-      );
-      setForm(initialState);
-    } finally {
-      setSubmitting(false);
+      const hash = await writeContractAsync({
+        address: campaignFactoryAddress,
+        abi: campaignFactoryAbi,
+        functionName: "createCampaign",
+        args: [
+          beneficiary as `0x${string}`,
+          goalValue,
+          deadlineSeconds,
+          metadataUri,
+        ],
+      });
+
+      setFeedback({ status: "pending", hash });
+    } catch (error) {
+      setFeedback({
+        status: "error",
+        message: (error as Error).message ?? "Failed to submit transaction.",
+      });
     }
   }
+
+  const isBusy = isPending || isConfirming || isSwitchingChain;
 
   return (
     <form
@@ -110,7 +206,7 @@ export default function CreateCampaignForm() {
             name="goal"
             step="0.01"
             min="0"
-            value={form.goal === 0 ? "" : form.goal}
+            value={form.goal}
             onChange={handleChange}
             placeholder="15000"
             className="w-full rounded-xl border border-white/10 bg-kaspa-night/60 px-4 py-3 text-sm text-white shadow-inner outline-none transition focus:border-kaspa-300 focus:ring-2 focus:ring-kaspa-200/50"
@@ -165,12 +261,39 @@ export default function CreateCampaignForm() {
 
       <button
         type="submit"
-        disabled={submitting}
+        disabled={isBusy}
         className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-gradient-to-r from-kaspa-400 to-kaspa-blue-500 px-6 py-3 text-sm font-semibold text-kaspa-night shadow-[0_20px_40px_rgba(17,227,197,0.35)] transition hover:shadow-[0_20px_55px_rgba(17,227,197,0.45)] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {submitting ? "Preparing transaction..." : "Review deployment transaction"}
+        {isConfirming
+          ? "Waiting for confirmations..."
+          : isPending
+            ? "Submitting transaction..."
+            : isSwitchingChain
+              ? "Switching network..."
+              : "Deploy campaign"}
       </button>
-      {feedback && <p className="mt-4 text-sm text-kaspa-200">{feedback}</p>}
+
+      {helperText && (
+        <p className="mt-3 text-xs text-kaspa-200/80">{helperText}</p>
+      )}
+
+      {feedback.status === "error" && (
+        <p className="mt-4 text-sm text-rose-300">{feedback.message}</p>
+      )}
+      {feedback.status === "pending" && (
+        <p className="mt-4 text-sm text-kaspa-200">
+          Transaction submitted: {shortHash(feedback.hash)}. Track progress in your wallet.
+        </p>
+      )}
+      {feedback.status === "confirmed" && (
+        <p className="mt-4 text-sm text-kaspa-200">
+          Campaign deployed! Tx hash {shortHash(feedback.hash)}
+        </p>
+      )}
     </form>
   );
+}
+
+function shortHash(hash: `0x${string}`) {
+  return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
 }

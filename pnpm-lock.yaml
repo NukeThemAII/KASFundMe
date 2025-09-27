@@ -13,6 +13,9 @@ importers:
       '@heroicons/react':
         specifier: ^2.2.0
         version: 2.2.0(react@18.2.0)
+      '@kasfundme/abi':
+        specifier: workspace:*
+        version: link:../../packages/abi
       '@rainbow-me/rainbowkit':
         specifier: ^2.2.8
         version: 2.2.8(@tanstack/react-query@5.90.2(react@18.2.0))(@types/react@18.3.24)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(typescript@5.9.2)(viem@2.37.8(bufferutil@4.0.9)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76))(wagmi@2.17.5(@tanstack/query-core@5.90.2)(@tanstack/react-query@5.90.2(react@18.2.0))(@types/react@18.3.24)(bufferutil@4.0.9)(react@18.2.0)(typescript@5.9.2)(utf-8-validate@5.0.10)(viem@2.37.8(bufferutil@4.0.9)(typescript@5.9.2)(utf-8-validate@5.0.10)(zod@3.25.76))(zod@3.25.76))
@@ -74,6 +77,8 @@ importers:
       typescript:
         specifier: ^5.6.3
         version: 5.9.2
+
+  packages/abi: {}
 
 packages:
 

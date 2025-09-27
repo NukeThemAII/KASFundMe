@@ -1,8 +1,21 @@
 import { NextResponse } from "next/server";
-import { platformStats } from "@/lib/mock-data";
+import { fetchStatsFromIndexer, getFallbackStats } from "@/lib/indexer-client";
 
 export const revalidate = 15;
 
-export function GET() {
-  return NextResponse.json({ data: platformStats });
+export async function GET() {
+  const indexerResponse = await fetchStatsFromIndexer();
+  if (indexerResponse) {
+    return NextResponse.json(indexerResponse, {
+      headers: {
+        "x-kasfundme-source": "indexer",
+      },
+    });
+  }
+
+  return NextResponse.json(getFallbackStats(), {
+    headers: {
+      "x-kasfundme-source": "mock",
+    },
+  });
 }
