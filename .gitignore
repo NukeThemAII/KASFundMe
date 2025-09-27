@@ -1,0 +1,31 @@
+# Dependencies
+**/node_modules
+
+# Build artifacts
+.next
+apps/web/.next
+out
+apps/web/out
+
+# Env files
+.env
+.env.*
+.evm/
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+
+# Editor
+.idea
+.vscode
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage
+
